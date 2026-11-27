@@ -734,11 +734,11 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
     }
 
     private func encode(_ v: some Encodable) -> String {
-        String(decoding: try! JSONEncoder().encode(v), as: UTF8.self)
+        (try? JSONEncoder().encode(v)).map { String(decoding: $0, as: UTF8.self) } ?? "null"
     }
 
     private func jsonString(_ v: Any) -> String {
-        String(decoding: try! JSONSerialization.data(withJSONObject: v), as: UTF8.self)
+        (try? JSONSerialization.data(withJSONObject: v)).map { String(decoding: $0, as: UTF8.self) } ?? "null"
     }
 
     private struct Header: Encodable {
@@ -826,8 +826,8 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
     // MARK: 页面发来的消息
 
     func userContentController(_ uc: WKUserContentController, didReceive msg: WKScriptMessage) {
-        let body = msg.body as! [String: Any]
-        let type = body["type"] as! String
+        // 页面发来的消息：格式不对就当没收到，不让它把应用带崩
+        guard let body = msg.body as? [String: Any], let type = body["type"] as? String else { return }
         if type == "ready" {
             ready = true
             lastHeader = ""
@@ -875,17 +875,19 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
         case "saveBlob":
             // 粘贴 / 拖进来的图片没有路径，先存到本地
             let name = (body["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "pasted.png"
-            let b64 = (body["data"] as! String).split(separator: ",").last.map(String.init) ?? ""
+            guard let data = body["data"] as? String else { throw SendError(message: tr("图片数据读不懂", "Couldn't read the image data")) }
+            let b64 = data.split(separator: ",").last.map(String.init) ?? ""
             let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("AgentDock/uploads")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let f = dir.appendingPathComponent("\(Int(Date().timeIntervalSince1970 * 1000))-\(name)")
-            try Data(base64Encoded: b64)!.write(to: f)
+            guard let bytes = Data(base64Encoded: b64) else { throw SendError(message: tr("图片数据读不懂", "Couldn't read the image data")) }
+            try bytes.write(to: f)
             reply("attached", ["files": [["path": f.path, "name": name]], "thumb": body["thumb"] as? Bool ?? false])
         case "send":
             let files = body["files"] as? [String] ?? []
             let (sess, dr) = (session, draft)
-            let raw = body["text"] as! String
+            guard let raw = body["text"] as? String else { return }
             let text = await Task.detached { self.withAttachments(raw, files, session: sess, draft: dr) }.value
             if let d = draft {
                 let t0 = Date()
@@ -914,15 +916,14 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
             reply("result", ["ok": true, "type": type, "notice": ""])
             confirmArrived(s, text)
         case "sendNow":
-            guard let s = session else { return }
-            try await model?.sendNow(s.id, body["qid"] as! String)
+            guard let s = session, let qid = body["qid"] as? String else { return }
+            try await model?.sendNow(s.id, qid)
             reply("result", ["ok": true, "type": type, "notice": tr("已立即发送，\(s.app) 会在当前任务里处理它", "Sent now. \(s.app) will handle it in the current task.")])
         case "unqueue":
-            guard let s = session else { return }
-            model?.unqueue(s.id, body["qid"] as! String)
+            guard let s = session, let qid = body["qid"] as? String else { return }
+            model?.unqueue(s.id, qid)
         case "approve":
-            guard let s = session, let a = approval else { return }
-            let i = body["index"] as! Int
+            guard let s = session, let a = approval, let i = body["index"] as? Int, a.labels.indices.contains(i) else { return }
             try await answerApproval(s, a, i)
             setApproval(nil)
             reply("result", ["ok": true, "type": type, "notice": tr("已\(a.labels[i])", "Chose “\(a.labels[i])”")])
@@ -941,7 +942,7 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
             try await stopSession(s)
             reply("result", ["ok": true, "type": type, "notice": tr("已让 \(s.app) 停止", "Stopped \(s.app).")])
         case "chip":
-            guard let chip = Chip(rawValue: body["chip"] as! String) else { return }
+            guard let name = body["chip"] as? String, let chip = Chip(rawValue: name) else { return }
             if let m = menu { await closeChip(m); menu = nil }
             if let d = draft {
                 if d.kind == .antigravity {
@@ -966,14 +967,16 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
             reply("menu", ["chip": chip.rawValue, "items": m.labels, "current": m.before])
         case "choose":
             if draft != nil, let chip = agyChip {
-                let c = agyChoices[body["index"] as! Int]
+                guard let i = body["index"] as? Int, agyChoices.indices.contains(i) else { return }
+                let c = agyChoices[i]
                 if chip == .model { draftModel = c.label; draftAgyModelId = c.id } else { draftPerm = c.label }
                 agyChip = nil
                 reply("menuDone", ["chip": chip.rawValue, "current": c.label])
                 return
             }
             guard let m = menu else { return }
-            let more = await chooseChip(m, body["index"] as! Int)
+            guard let i = body["index"] as? Int else { return }
+            let more = await chooseChip(m, i)
             if more {
                 reply("menu", ["chip": m.chip.rawValue, "items": m.labels, "current": m.before])
             } else {

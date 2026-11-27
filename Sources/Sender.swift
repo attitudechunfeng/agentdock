@@ -34,19 +34,30 @@ private func sendAntigravity(_ s: Session, _ text: String) async throws {
     try await Task.detached { try runAgentapi(["send-message", s.rawId, text]) }.value
 }
 
+/// 最新的那个 hub 文件里的端口和 csrf 令牌
+private func agyHub() throws -> (port: Int, csrf: String) {
+    let daemon = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/antigravity/daemon")
+    let notRunning = SendError(message: tr("Antigravity 没在运行", "Antigravity isn’t running"))
+    // 端口会随重启变，取最新的那个
+    guard let hubs = try? FileManager.default.contentsOfDirectory(at: daemon, includingPropertiesForKeys: [.contentModificationDateKey]),
+          let hub = hubs.filter({ $0.lastPathComponent.hasPrefix("hub_") && $0.pathExtension == "json" }).max(by: { mtimeOf($0) < mtimeOf($1) })
+    else { throw notRunning }
+    let o = try JSONSerialization.jsonObject(with: Data(contentsOf: hub)) as? [String: Any]
+    guard let port = (o?["httpPort"] as? Int) ?? (o?["httpPort"] as? String).flatMap({ Int($0) }) else {
+        throw SendError(message: tr("Antigravity 本地服务的端口读不到", "Couldn't read the port of Antigravity's local service"))
+    }
+    return (port, o?["csrfToken"] as? String ?? "")
+}
+
 /// Antigravity 本地服务的接口（只在本机 127.0.0.1，带它自己的 csrf 令牌）
 func agyRPC(_ method: String, _ body: [String: Any]) async throws -> [String: Any] {
-    let daemon = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/antigravity/daemon")
-    let hubs = try FileManager.default.contentsOfDirectory(at: daemon, includingPropertiesForKeys: [.contentModificationDateKey])
-        .filter { $0.lastPathComponent.hasPrefix("hub_") && $0.pathExtension == "json" }
-    guard let hub = hubs.max(by: { mtimeOf($0) < mtimeOf($1) }) else { throw SendError(message: tr("Antigravity 没在运行", "Antigravity isn’t running")) }
-    let o = try JSONSerialization.jsonObject(with: Data(contentsOf: hub)) as! [String: Any]
-    var req = URLRequest(url: URL(string: "http://127.0.0.1:\(o["httpPort"]!)/exa.language_server_pb.LanguageServerService/\(method)")!)
+    let hub = try agyHub()
+    var req = URLRequest(url: URL(string: "http://127.0.0.1:\(hub.port)/exa.language_server_pb.LanguageServerService/\(method)")!)
     req.httpMethod = "POST"
     req.timeoutInterval = 15
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
-    req.setValue(o["csrfToken"] as? String, forHTTPHeaderField: "x-codeium-csrf-token")
+    req.setValue(hub.csrf, forHTTPHeaderField: "x-codeium-csrf-token")
     req.httpBody = try JSONSerialization.data(withJSONObject: body)
     let (data, _) = try await URLSession.shared.data(for: req)
     let r = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
@@ -57,18 +68,13 @@ func agyRPC(_ method: String, _ body: [String: Any]) async throws -> [String: An
 /// 调 Antigravity 自带的 agentapi（send-message / new-conversation），返回它的输出
 @discardableResult
 func runAgentapi(_ args: [String]) throws -> String {
-    let daemon = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/antigravity/daemon")
-    let hubs = try FileManager.default.contentsOfDirectory(at: daemon, includingPropertiesForKeys: [.contentModificationDateKey])
-        .filter { $0.lastPathComponent.hasPrefix("hub_") && $0.pathExtension == "json" }
-    // 端口会随重启变，取最新的那个
-    guard let hub = hubs.max(by: { mtimeOf($0) < mtimeOf($1) }) else { throw SendError(message: tr("Antigravity 没在运行", "Antigravity isn’t running")) }
-    let o = try JSONSerialization.jsonObject(with: Data(contentsOf: hub)) as! [String: Any]
+    let hub = try agyHub()
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/Applications/Antigravity.app/Contents/Resources/bin/language_server")
     p.arguments = ["agentapi"] + args
     var env = ProcessInfo.processInfo.environment
-    env["ANTIGRAVITY_LS_ADDRESS"] = "127.0.0.1:\(o["httpPort"]!)"
-    env["ANTIGRAVITY_CSRF_TOKEN"] = o["csrfToken"] as? String
+    env["ANTIGRAVITY_LS_ADDRESS"] = "127.0.0.1:\(hub.port)"
+    env["ANTIGRAVITY_CSRF_TOKEN"] = hub.csrf
     p.environment = env
     let out = Pipe()
     p.standardError = out

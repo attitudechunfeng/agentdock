@@ -136,6 +136,7 @@ func chooseChip(_ m: OpenMenu, _ index: Int) async -> Bool {
         await sleep(0.3)
         return true
     }
+    guard m.items.indices.contains(index) else { return false }
     let before = Set(menuItems(m.ax).map { $0.label })
     AXUIElementPerformAction(m.items[index].el, kAXPressAction as CFString)
     await sleep(0.5)

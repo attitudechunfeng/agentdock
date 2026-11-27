@@ -390,9 +390,9 @@ private func history(_ kind: Kind, _ f: URL) -> [Item] {
     var h = hists[f.path] ?? Hist()
     guard let fh = try? FileHandle(forReadingFrom: f) else { return h.items }
     defer { try? fh.close() }
-    let size = try! fh.seekToEnd()
+    guard let size = try? fh.seekToEnd() else { return h.items }
     if size < h.offset { h = Hist() }   // 文件被重写过，从头来
-    try! fh.seek(toOffset: h.offset)
+    guard (try? fh.seek(toOffset: h.offset)) != nil else { return h.items }
     while true {
         let chunk = fh.readData(ofLength: 8 << 20)
         if chunk.isEmpty { break }

@@ -90,6 +90,7 @@ func modelName(_ id: String) -> String {
     }
     if id.hasPrefix("gpt-") {
         let p = id.split(separator: "-").map(String.init)
+        guard p.count > 1 else { return id }
         return "GPT-" + p[1] + p.dropFirst(2).map { " " + $0.prefix(1).uppercased() + $0.dropFirst() }.joined()
     }
     return id
@@ -137,9 +138,9 @@ private func recentFiles(_ root: URL, maxDepth: Int, now: Date, _ match: (URL) -
 func tailLines(_ url: URL, _ bytes: UInt64) -> [Substring] {
     guard let h = try? FileHandle(forReadingFrom: url) else { return [] }
     defer { try? h.close() }
-    let size = try! h.seekToEnd()
+    guard let size = try? h.seekToEnd() else { return [] }
     let start = size > bytes ? size - bytes : 0
-    try! h.seek(toOffset: start)
+    guard (try? h.seek(toOffset: start)) != nil else { return [] }
     var lines = String(decoding: h.readDataToEndOfFile(), as: UTF8.self).split(separator: "\n")
     if start > 0, !lines.isEmpty { lines.removeFirst() }
     return lines
@@ -158,7 +159,7 @@ private func cached(_ f: URL, _ m: Date, _ make: () -> Session?) -> Session? {
 // MARK: Codex：~/.codex/sessions/年/月/日/rollout-*-<id>.jsonl，标题在 session_index.jsonl
 
 private func firstLine(_ url: URL) -> Substring {
-    let h = try! FileHandle(forReadingFrom: url)
+    guard let h = try? FileHandle(forReadingFrom: url) else { return "" }
     defer { try? h.close() }
     var data = Data()
     while !data.contains(UInt8(ascii: "\n")) {
@@ -176,18 +177,18 @@ private var codexCtx: [String: [String: Any]] = [:]
 private func lastTurnContext(_ f: URL) -> [String: Any]? {
     guard let h = try? FileHandle(forReadingFrom: f) else { return nil }
     defer { try? h.close() }
-    let size = try! h.seekToEnd()
+    guard let size = try? h.seekToEnd() else { return nil }
     let chunk: UInt64 = 4 * 1024 * 1024
     var end = size
     let marker = Data("\"type\":\"turn_context\"".utf8)
     while end > 0 {
         let start = end > chunk ? end - chunk : 0
-        try! h.seek(toOffset: start)
+        guard (try? h.seek(toOffset: start)) != nil else { return nil }
         let d = h.readData(ofLength: Int(end - start))
         if let r = d.range(of: marker, options: .backwards) {
             // 取出这一行：往前到上一个换行，往后到下一个换行（行可能跨出这一段，就多读一点）
             let lineStart = d[..<r.lowerBound].lastIndex(of: UInt8(ascii: "\n")).map { $0 + 1 } ?? d.startIndex
-            try! h.seek(toOffset: start + UInt64(lineStart - d.startIndex))
+            guard (try? h.seek(toOffset: start + UInt64(lineStart - d.startIndex))) != nil else { return nil }
             var line = Data()
             while true {
                 let c = h.readData(ofLength: 256 * 1024)
