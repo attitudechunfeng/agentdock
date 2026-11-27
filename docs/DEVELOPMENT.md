@@ -155,8 +155,8 @@ iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
 - **自动更新**：会话一轮回复结束后等 90 秒，期间同一项目别的会话也结束就合在一起，把这轮新增的用户消息和回复（不含工具调用）交给 agent 增量更新。Convoy 没开时结束的轮次，下次启动时补上。
 - **汇总 agent**：总览或详情页底部可选。
   - Claude Code 命令行（Opus 5.5 默认 / Sonnet 5.5 / Haiku 5.5）、Codex 命令行（config.toml 的默认模型，可选强度）：无界面运行，不给工具、不跑你配的钩子、不留会话记录。
-  - Gemini（4 Neon 高 / 中、3.8 Flash）：借开着的 Antigravity，用 agentapi 临时开一个标题为「Convoy 看板汇总」的对话，拿到回复就用 DeleteCascadeTrajectory 删掉；这种对话不进会话列表。它带工具、权限按 Antigravity 的全局预设，只能在提示里要求不用工具。
-  - 被模型的安全过滤误拦（实测语音研究类内容 Opus、Sonnet 都会被拦）或 Antigravity 没开时，按 Opus → Sonnet → Gemini → Codex → Haiku 的顺序换下一个重试。每次调用约 10–100 秒，花的是对应账号的额度。
+  - Gemini（4 Neon 高 / 中、3.8 Flash）：借开着的 Antigravity，用 agentapi 临时开一个标题为「Convoy 看板汇总」的对话，拿到回复就用 DeleteCascadeTrajectory 删掉；这种对话不进会话列表。它带工具、权限按 Antigravity 的全局预设，只能在提示里要求不用工具。所以 Antigravity 的全局预设是 Turbo / Auto 时（命令不经确认就能执行）不借它，读不到预设时也一样。
+  - 被模型的安全过滤误拦（实测语音研究类内容 Opus、Sonnet 都会被拦）、Antigravity 没开、或它的权限预设不允许借 Gemini 时，按 Opus → Sonnet → Gemini → Codex → Haiku 的顺序换下一个重试。每次调用约 10–100 秒，花的是对应账号的额度。
 - **会话读到看板**（默认关，底部“会话自动读到看板”开关，打开前弹窗说明）：在 Claude Code（`~/.claude/settings.json`，以及本机配置里其他 Claude 账号的 settings.json）和 Codex（`~/.codex/hooks.json`）里加一个钩子 `Convoy --board-hook`，挂在“发消息时”和“会话开始 / 压缩后”。钩子按会话 id 查 `~/.agentdock/boards/sessions.json` 找到所属项目，看板自上次注入后有变化、或会话刚开始 / 刚压缩时，把 `~/.agentdock/boards/.ctx/<项目 id>.txt`（总目标、现状、等你定、各大类进度、有效 / 无效做法）附进这一轮；没变化什么都不加。改配置前各备份一份 `.agentdock-backup`，只动带 `--board-hook` 的条目。Codex 第一次用到时会请你确认信任这个钩子。Antigravity 没有钩子，读不到。
 - **项目文件**：每个项目一份完整 Markdown `~/.agentdock/boards/<项目名>.md`，目录里还有 `README.md` 索引。不开钩子时，可以用 ⋯ →「复制给 agent 的提示」让会话先读这份文件。
 - **存储**：看板内容、归类、汇总进度在 `~/Library/Application Support/AgentDock/board.json`。

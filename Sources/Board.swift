@@ -662,7 +662,8 @@ final class BoardStore: ObservableObject {
                 let out = try await runBoardAgent(system: system, prompt: prompt, settings: t)
                 if i > 0 { log("board: fell back to \(t.label)") }
                 return out
-            } catch let e as BoardError where e.message.contains("safeguards") || e.message.contains("flagged") || e.message.contains("Antigravity 没开") || e.message.contains("Antigravity isn't running") {
+            } catch let e as BoardError where e.message.contains("safeguards") || e.message.contains("flagged") || e.message.contains("Antigravity 没开") || e.message.contains("Antigravity isn't running")
+                                         || e.message.contains("权限预设") || e.message.contains("permission preset") {
                 last = e
                 log("board: \(t.label) unavailable (\(e.message.prefix(60))), trying next")
             }
@@ -946,11 +947,25 @@ let boardScratchTitle = "Convoy 看板汇总"
 let boardScratchTitles: Set<String> = [boardScratchTitle, "AgentDock 看板汇总"]
 private let agyServer = "/Applications/Antigravity.app/Contents/Resources/bin/language_server"
 
-/// Antigravity 的对话带工具、权限按你的全局预设，没法关掉，只能在提示里要求它不用工具。
+/// Antigravity 的全局权限预设下，能不能借它做看板汇总。
+/// 临时开的那个对话带着工具、按你的全局预设跑，提示里一句“不要用工具”拦不住：
+/// Turbo / Auto 下命令不经你确认就能执行，这两种预设下不借 Gemini，换下一个汇总 agent
+func geminiPresetAllowed(_ raw: String) -> Bool {
+    let name = raw.replacingOccurrences(of: "AGENT_PERMISSION_PRESET_", with: "").uppercased()
+    return ["DEFAULT", "REQUEST_REVIEW"].contains(name)
+}
+
+/// Antigravity 的对话带工具、权限按你的全局预设，没法关掉，只能在提示里要求它不用工具；
+/// 全局预设是 Turbo / Auto（或读不到）时不借它，见 geminiPresetAllowed。
 /// 回复看对话记录：最后一步是模型的回复、已完成，且 2 秒内没有新步骤，就算答完。5 分钟超时。
 /// 不论成败都删掉这个对话（官方接口 DeleteCascadeTrajectory，对话记录和会话库里的条目一起删）
 func runGemini(_ prompt: String, model: String) async throws -> String {
     guard runningApp("/Applications/Antigravity.app") != nil else { throw BoardError(tr("Antigravity 没开，Gemini 用不了", "Antigravity isn't running, so Gemini is unavailable")) }
+    let preset = (try? await agyRPC("GetPermissionSettings", [:]))?["globalPreset"] as? String
+    guard let preset, geminiPresetAllowed(preset) else {
+        throw BoardError(tr("Antigravity 的全局权限预设是 Turbo / Auto（或读不到），看板汇总不借 Gemini",
+                            "Antigravity's global permission preset is Turbo / Auto (or unknown), so Gemini isn't used for board summaries"))
+    }
     let full = prompt + "\n\n（不要调用任何工具，不要读写文件、不要运行命令，直接按要求输出。）"
     let out: String
     do {
