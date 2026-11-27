@@ -365,9 +365,9 @@ textarea::placeholder { color: var(--faint); }
   </div>
 </footer>
 <script src="marked.umd.js"></script>
+<script src="markdown.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const post = m => window.webkit.messageHandlers.ad.postMessage(m);
 // 界面语言：Swift 在页面开始时注入 window.AD_LANG（'zh' 或 'en'），默认中文
 const tr = (zh, en) => (window.AD_LANG === 'en' ? en : zh);
@@ -421,8 +421,8 @@ function nativeUp() {
 // mcp__服务__工具 这类长名字只留最后一段
 const tname = n => n.startsWith('mcp__') ? n.split('__').pop() : n;
 
-// 对话内容不可信：原始 HTML 一律转义显示，不让它进页面执行
-marked.use({ gfm: true, breaks: true, renderer: { html(t) { return esc(t.raw ?? t.text ?? ''); } } });
+// Markdown 怎么渲染（原始 HTML 转义、链接和图片只放行安全地址）在 markdown.js；esc 也来自那里
+installMarkdown(marked);
 // 渲染过的 Markdown 记下来，刷新时同样的内容不再重新解析
 const mdCache = new Map();
 const md = s => {

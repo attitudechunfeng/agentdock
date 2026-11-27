@@ -1027,10 +1027,13 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
         }
     }
 
+    /// 聊天页里的链接只交给系统打开这几种地址；别的协议（file:、各个应用自己的）不处理
+    private static let linkSchemes: Set<String> = ["http", "https", "mailto"]
+
     // 链接一律用系统浏览器打开，页面本身不跳走
     func webView(_ w: WKWebView, decidePolicyFor a: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if a.navigationType == .linkActivated, let u = a.request.url {
-            NSWorkspace.shared.open(u)
+            if let s = u.scheme?.lowercased(), Self.linkSchemes.contains(s) { NSWorkspace.shared.open(u) }
             decisionHandler(.cancel)
             return
         }
