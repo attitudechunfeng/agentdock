@@ -24,6 +24,11 @@ func runningApp(_ path: String) -> NSRunningApplication? {
     NSWorkspace.shared.runningApplications.first { $0.bundleURL?.path == path }
 }
 
+/// 这个应用是不是你正在用的（最前面那个）：是的话别在后台点它的界面
+func isFrontmost(_ path: String) -> Bool {
+    NSWorkspace.shared.frontmostApplication?.bundleURL?.path == path
+}
+
 /// 打开 Electron 应用的网页控件辅助功能；第一次打开后界面树要一会儿才长出来
 func enableWebAX(_ app: AXUIElement) {
     axSet(app, "AXManualAccessibility", kCFBooleanTrue)

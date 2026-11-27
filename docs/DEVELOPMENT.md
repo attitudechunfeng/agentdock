@@ -95,6 +95,7 @@ iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
   - 启动时读一次，之后每 15 分钟一次，也可以手动刷新。
   - Claude：在后台点开输入框旁的「用量」面板，读 5 小时和每周两条进度条，读完关掉；
   - Codex：在后台点开它的用量菜单，读完关掉；
+  - 你正在用 Claude / Codex（它在最前面）时不去点它们的界面，免得面板在你眼前弹出来：Claude 沿用上次读到的，Codex 退回用会话记录里的数字；
   - Antigravity：调它本地服务的只读接口 `RetrieveUserQuotaSummary`，按 Gemini、Claude/GPT 两组显示每周和 5 小时剩余。
 
 ## 右栏：对话

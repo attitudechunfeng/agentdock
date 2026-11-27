@@ -459,7 +459,7 @@ final class Model: ObservableObject {
         guard !usageLoading else { return }
         usageLoading = true
         Task { @MainActor in
-            usage = await readUsage()
+            usage = await readUsage(previous: usage)
             usageTime = Date()
             usageLoading = false
         }

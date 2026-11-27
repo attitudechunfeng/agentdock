@@ -354,11 +354,14 @@ private let bjFormatter: DateFormatter = {
 /// - Claude：在后台点开输入框旁的“用量”面板，读两条进度条（5 小时、每周）和各自的重置时间，读完按 Esc 关掉
 /// - Antigravity：本地服务的只读接口
 /// - Codex：点开侧栏“用量”菜单读完关掉
-func readUsage() async -> [UsageApp] {
+/// 你正在用 Claude / Codex（它在最前面）时不去点它们的界面，面板会在你眼前弹出来：
+/// Claude 沿用上次读到的（previous），Codex 退回用会话记录里的数字
+func readUsage(previous: [UsageApp] = []) async -> [UsageApp] {
     guard AXIsProcessTrusted() else { return [] }
     var out: [UsageApp] = []
     for (name, path) in claudeApps {
         guard let app = runningApp(path) else { continue }
+        if isFrontmost(path) { out += previous.filter { $0.appPath == path }; continue }
         let ax = AXUIElementCreateApplication(app.processIdentifier)
         enableWebAX(ax)
         guard let b = axNodes(ax).first(where: { $0.role == "AXPopUpButton" && L.anyPrefix($0.label, L.claudeUsagePrefix) }) else { continue }
@@ -398,7 +401,7 @@ func readUsage() async -> [UsageApp] {
     let fileUsage = codexUsageFromFiles()
     if let f = fileUsage, Date().timeIntervalSince(f.at) < 30 * 60 {
         out.append(UsageApp(app: "Codex", appPath: codexAppPath, items: f.items))
-    } else if let app = runningApp(codexAppPath), let items = await codexUsageFromUI(app), !items.isEmpty {
+    } else if let app = runningApp(codexAppPath), !isFrontmost(codexAppPath), let items = await codexUsageFromUI(app), !items.isEmpty {
         out.append(UsageApp(app: "Codex", appPath: codexAppPath, items: items))
     } else if let f = fileUsage {
         out.append(UsageApp(app: "Codex", appPath: codexAppPath, items: f.items))
