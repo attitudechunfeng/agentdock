@@ -244,7 +244,7 @@ Claude 用 AskUserQuestion 向你提问时（原应用里是一张带选项的�
 
 ## 排查
 
-日志在 `~/Library/Application Support/AgentDock/send-debug.log`。下面几条命令都只读，或者打开后会原样复原：
+日志在 `~/Library/Application Support/AgentDock/send-debug.log`。发出去的消息正文不记，只记长度和核对结果；文件超过 1 MB 时转成 `send-debug.log.1`（只留这一份旧的）。诊断模式（`--test-xxx`）和主程序会同时写这个文件，转存和写入靠旁边的 `send-debug.log.lock` 这把文件锁排队。下面几条命令都只读，或者打开后会原样复原：
 
 ```bash
 open -n -g build/Convoy.app --args --dump-ax <应用路径> <输出文件>
