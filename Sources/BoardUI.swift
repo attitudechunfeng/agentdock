@@ -45,7 +45,7 @@ private func ago(_ d: Date?) -> String {
     return tr("\(n) 天前更新", "Updated \(n) day\(n == 1 ? "" : "s") ago")
 }
 
-private func today() -> String { let f = DateFormatter(); f.dateFormat = "MM-dd"; return f.string(from: Date()) }
+private func today() -> String { let f = DateFormatter(); f.timeZone = appZone; f.dateFormat = "MM-dd"; return f.string(from: Date()) }
 
 /// 点一下弹出的小菜单。SwiftUI 的 Menu 每个都要建一个系统弹出按钮，几十个时展开详情页很卡；
 /// 这里平时只是个普通按钮，点了才临时建菜单
@@ -804,7 +804,7 @@ struct BoardSessionList: View {
                          note: tr("\(sessions.count) 条 · 右键挪到别的项目或移出看板", "\(sessions.count) · right-click to move to another project or remove from the board"))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(sessions) { s in
-                    SessionRow(s: s, showProject: false, unread: model.isUnread(s))
+                    SessionRow(s: s, showProject: false, unread: model.isUnread(s), zone: appZone)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(RoundedRectangle(cornerRadius: 8).fill(card))
                         .contentShape(Rectangle())

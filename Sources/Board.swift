@@ -178,7 +178,7 @@ struct Project: Codable, Equatable, Identifiable {
     /// 你加的、改过的条目原文保留；你删掉的不再加回来
     mutating func apply(_ o: [String: Any]) {
         let ign = Set(ignored)
-        let df = DateFormatter(); df.dateFormat = "MM-dd"
+        let df = DateFormatter(); df.timeZone = appZone; df.dateFormat = "MM-dd"
         let today = df.string(from: Date())
         var sugg: [BoardSuggestion] = []
         if goal.isEmpty, let g = o["goal"] as? String, !g.isEmpty { goal = g }
@@ -498,7 +498,7 @@ final class BoardStore: ObservableObject {
     }
 
     func markdown(_ p: Project) -> String {
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH:mm"
+        let df = DateFormatter(); df.timeZone = appZone; df.dateFormat = "yyyy-MM-dd HH:mm"
         let names = p.sessions.compactMap { lookup($0).map { tr("「\($0.title)」(\($0.app))", "\"\($0.title)\" (\($0.app))") } }
         let upd = p.updated.map { tr("，更新于 ", ", updated ") + df.string(from: $0) } ?? ""
         var m = "# \(p.name)\n\n> " + tr("由 Convoy 根据各会话自动维护\(upd)。关联会话：\(names.joined(separator: "、"))",
@@ -694,7 +694,7 @@ final class BoardStore: ObservableObject {
 
     @MainActor
     private func update(_ p: Project, _ text: String, reorganize: Bool = false) async throws -> [String: Any] {
-        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        let df = DateFormatter(); df.timeZone = appZone; df.dateFormat = "yyyy-MM-dd"
         let ask = !reorganize ? "" : """
         【这次是用户要求的整体刷新】用户觉得看板的目标和大类归纳得不够清楚，手动做了修改，以用户为准：
         \(p.edits.isEmpty ? "（用户没有改动，只要求重新整理）" : p.edits.map { "- " + $0 }.joined(separator: "\n"))

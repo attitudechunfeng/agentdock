@@ -165,6 +165,8 @@ final class Model: ObservableObject {
     @Published var query = "" { didSet { scheduleSearch() } }
     @Published var hits: [SearchHit] = []
     @Published var searching = false
+    /// 系统时区每变一次加一。侧栏每行的时间是按传进来的时区算的，靠这个让各行重新取时区
+    @Published private(set) var zoneRevision = 0
     private var searchGen = 0
     private let searchQueue = DispatchQueue(label: "agentdock.search", qos: .utility)
     private var warmed = false
@@ -256,6 +258,12 @@ final class Model: ObservableObject {
             }
         }
         Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in self?.refreshUsage() }
+        // 系统时区变了：先放掉时区缓存，再让侧栏各行重新取时区；用量卡片上的重置时间是按旧时区排好版的，重新读一遍
+        NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main) { [weak self] _ in
+            systemTimeZoneDidChange()
+            self?.zoneRevision += 1
+            self?.refreshUsage()
+        }
     }
 
     private var watchers: [FileWatcher] = []
@@ -528,22 +536,37 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
         web = ClickThroughWebView(frame: .zero, configuration: cfg)
         super.init()
         cfg.userContentController.add(self, name: "ad")
-        // 告诉聊天页用哪种语言（页面里用 tr('中文','English') 取文案）
-        cfg.userContentController.addUserScript(WKUserScript(source: "window.AD_LANG = '\(appLang)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.userContentController.addUserScript(WKUserScript(source: Self.pagePrelude, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // 切换语言：换掉注入的语言、重新加载聊天页（加载完会把当前会话再推一遍）
-        NotificationCenter.default.addObserver(forName: .languageChanged, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .languageChanged, object: nil, queue: .main) { [weak self] _ in self?.reloadPage() }
+        // 系统时区变了：先把缓存的时区放掉，再让页面原地换时区、重画时间。
+        // 不重新加载页面，没发出去的草稿和附件要留着
+        NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main) { [weak self] _ in
+            systemTimeZoneDidChange()
             guard let self else { return }
-            let uc = self.web.configuration.userContentController
-            uc.removeAllUserScripts()
-            uc.addUserScript(WKUserScript(source: "window.AD_LANG = '\(appLang)';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
-            self.ready = false
-            self.web.reload()
+            self.pushTimezone()
         }
         web.navigationDelegate = self
         web.setValue(false, forKey: "drawsBackground")
         let res = Bundle.main.resourceURL!
         web.loadFileURL(res.appendingPathComponent("chat.html"), allowingReadAccessTo: res)
         // 不定时轮询：对话记录、后台任务输出文件一变就重读（见 rewatch）；批准卡片在状态变了、记录变了时去找
+    }
+
+    /// 页面开始前注入：界面语言（页面里用 tr('中文','English') 取文案）、显示时间用的时区
+    private static var pagePrelude: String { "window.AD_LANG = '\(appLang)'; window.AD_TZ = '\(appZone.identifier)';" }
+
+    private func reloadPage() {
+        let uc = web.configuration.userContentController
+        uc.removeAllUserScripts()
+        uc.addUserScript(WKUserScript(source: Self.pagePrelude, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        ready = false
+        web.reload()
+    }
+
+    /// 把现在的系统时区发给页面，页面原地换掉时区、重画时间
+    private func pushTimezone() {
+        js("AD.setTimezone(\(jsonString([appZone.identifier])))")
     }
 
     // MARK: 文件变动通知：盯住正在看的这条会话的记录文件和还在跑的后台任务输出文件
@@ -833,6 +856,8 @@ final class ChatController: NSObject, WKScriptMessageHandler, WKNavigationDelega
             lastHeader = ""
             lastSig = ""; lastSent = 0
             pushHeader()
+            // 页面加载期间系统时区可能已经变了：注入的是加载那一刻的，这里再发一次现在的
+            pushTimezone()
             reload()
             checkApproval()
             updateLiveTimer()

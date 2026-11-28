@@ -527,35 +527,42 @@ function groupHTML(g, isLast, tookMs) {
     <div class="gbody">${g.map(it => stepHTML(it, live)).join('')}</div></div>`;
 }
 
-// ---------- 时间：一律按北京时间显示 ----------
+// ---------- 时间：按系统时区显示（Swift 注入 window.AD_TZ），拿不到时退回北京时间 ----------
 const WEEK = tr(['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'], ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const BJ = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' });
+const zoneFormat = tz => { try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }); } catch (e) { return null; } };
+let ZONE = zoneFormat(window.AD_TZ) || zoneFormat('Asia/Shanghai');
 const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-function bj(d) {
-  const p = Object.fromEntries(BJ.formatToParts(d).map(x => [x.type, x.value]));
+function zoned(d) {
+  const p = Object.fromEntries(ZONE.formatToParts(d).map(x => [x.type, x.value]));
   // 英文界面用 12 小时制（2:05 PM）
   const h = +p.hour, hm = EN() ? `${h % 12 || 12}:${p.minute} ${h < 12 ? 'AM' : 'PM'}` : `${p.hour}:${p.minute}`;
   return { y: +p.year, m: +p.month, d: +p.day, hm, wd: WD[p.weekday], key: `${p.year}-${p.month}-${p.day}` };
 }
 const monthDay = d => tr(`${d.m}月${d.d}日`, `${MON[d.m - 1]} ${d.d}`);
+// 昨天按这个时区的日历算：夏令时切换那天一天不是 24 小时，直接减一天的毫秒数会落到前天
+function yesterdayKey() {
+  const t = zoned(new Date()), u = new Date(Date.UTC(t.y, t.m - 1, t.d));
+  u.setUTCDate(u.getUTCDate() - 1);
+  return `${u.getUTCFullYear()}-${u.getUTCMonth() + 1}-${u.getUTCDate()}`;
+}
 function clock(ts) {
   if (!ts) return '';
-  const t = new Date(ts), d = bj(t), now = new Date();
-  if (d.key === bj(now).key) return d.hm;
+  const t = new Date(ts), d = zoned(t), now = new Date();
+  if (d.key === zoned(now).key) return d.hm;
   if (now - t < 6 * 864e5) return WEEK[d.wd] + tr('', ' ') + d.hm;
   return `${monthDay(d)} ${d.hm}`;
 }
 let lastDay = '';
 function daySep(ts) {
   if (!ts) return '';
-  const d = bj(new Date(ts));
+  const d = zoned(new Date(ts));
   if (d.key === lastDay) return '';
   const first = !lastDay;
   lastDay = d.key;
   if (first) return '';
   const now = new Date();
-  return (d.key === bj(now).key ? tr('今天', 'Today') : d.key === bj(new Date(now - 864e5)).key ? tr('昨天', 'Yesterday') : monthDay(d)) + ' ' + d.hm;
+  return (d.key === zoned(now).key ? tr('今天', 'Today') : d.key === yesterdayKey() ? tr('昨天', 'Yesterday') : monthDay(d)) + ' ' + d.hm;
 }
 function took(ms) {
   const s = Math.round(ms / 1000);
@@ -1071,6 +1078,13 @@ window.AD = {
   },
   live(l) {
     S.live = l;
+    render();
+  },
+  // 系统时区变了：Swift 调过来，原地换掉时区、把时间重画一遍。不重新加载页面，没发出去的草稿和附件都留着
+  setTimezone(ids) {
+    const z = zoneFormat(ids[0]);
+    if (!z) return;
+    ZONE = z;
     render();
   },
   setQueue(q) {

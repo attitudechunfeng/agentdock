@@ -7,12 +7,11 @@ struct WebView: NSViewRepresentable {
     func updateNSView(_ v: WKWebView, context: Context) {}
 }
 
-/// 全应用统一用北京时间，不受系统或环境变量 TZ 影响
-let beijing = TimeZone(identifier: "Asia/Shanghai")!
-private let bjCal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = beijing; return c }()
+/// 全应用统一用系统时区（appZone，见 Zone.swift），不受环境变量 TZ 影响；每次现取，系统时区变了才跟得上
+private var appCal: Calendar { var c = Calendar(identifier: .gregorian); c.timeZone = appZone; return c }
 
 private func dayLabel(_ d: Date) -> String {
-    let cal = bjCal
+    let cal = appCal
     if cal.isDateInToday(d) { return "今天" }
     if cal.isDateInYesterday(d) { return "昨天" }
     if Date().timeIntervalSince(d) < 7 * 24 * 3600 { return "最近 7 天" }
@@ -24,11 +23,13 @@ private func dayTitle(_ day: String) -> String {
     ["今天": tr("今天", "Today"), "昨天": tr("昨天", "Yesterday"), "最近 7 天": tr("最近 7 天", "Previous 7 days"), "更早": tr("更早", "Older")][day] ?? day
 }
 
-private func timeLabel(_ d: Date) -> String {
+/// 时区由调用方传进来：系统时区变了，父视图会带着新的时区重新生成这一行
+private func timeLabel(_ d: Date, zone: TimeZone) -> String {
     let f = DateFormatter()
-    f.timeZone = beijing
+    f.timeZone = zone
     if isEnglish { f.locale = Locale(identifier: "en_US_POSIX") }
-    f.dateFormat = bjCal.isDateInToday(d) ? "HH:mm" : tr("M月d日", "MMM d")
+    var cal = Calendar(identifier: .gregorian); cal.timeZone = zone
+    f.dateFormat = cal.isDateInToday(d) ? "HH:mm" : tr("M月d日", "MMM d")
     return f.string(from: d)
 }
 
@@ -44,6 +45,7 @@ struct SessionRow: View {
     let s: Session
     let showProject: Bool
     var unread = false
+    let zone: TimeZone
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(nsImage: appIcon(s.appPath)).resizable().frame(width: 18, height: 18).padding(.top, 1)
@@ -71,7 +73,7 @@ struct SessionRow: View {
                 Label("\(s.bg)", systemImage: "gearshape.2").font(.caption2).foregroundStyle(.secondary)
                     .help(tr("\(s.bg) 个后台任务在跑", s.bg == 1 ? "1 background task running" : "\(s.bg) background tasks running"))
             } else {
-                Text(timeLabel(s.updated)).font(.caption2).foregroundStyle(.tertiary).padding(.top, 2)
+                Text(timeLabel(s.updated, zone: zone)).font(.caption2).foregroundStyle(.tertiary).padding(.top, 2)
             }
         }
         .padding(.vertical, 3)
@@ -173,7 +175,7 @@ struct UsageView: View {
 
 func hhmm(_ d: Date) -> String {
     let f = DateFormatter()
-    f.timeZone = TimeZone(identifier: "Asia/Shanghai")
+    f.timeZone = appZone
     f.dateFormat = "HH:mm"
     return f.string(from: d)
 }
@@ -237,7 +239,7 @@ struct RootView: View {
             }
             .padding(.vertical, 3)
         } else {
-            SessionRow(s: s, showProject: showProject, unread: model.isUnread(s))
+            SessionRow(s: s, showProject: showProject, unread: model.isUnread(s), zone: appZone)
                 .padding(.horizontal, 6)
                 .background(RoundedRectangle(cornerRadius: 7).fill(model.selectedId == s.id ? Color.primary.opacity(0.09) : .clear))
                 .contentShape(Rectangle())
