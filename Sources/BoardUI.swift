@@ -82,13 +82,13 @@ struct BoardHeader: View {
         if on {
             a.messageText = tr("让会话自动读到项目看板？", "Share the project board with your sessions?")
             a.informativeText = tr("""
-            会在这些配置里加一个钩子（其他钩子不动，改之前各备份一份 .agentdock-backup）：
+            会在这些配置里加一个钩子（其他钩子不动，改之前各备份一份 .agentdock-backup-时间）：
             · Claude Code：~/.claude/settings.json（以及本机配置里其他 Claude 账号的 settings.json）
             · Codex：~/.codex/hooks.json（Codex 下次用到时会请你确认信任这个钩子）
 
             之后你在某条会话里发消息时，如果它所属项目的看板自上次以来有更新（或会话刚开始、刚压缩），就把看板精简版（总目标、各大类进度、等你定、有效 / 无效做法）附进这一轮；没更新什么都不加。随时可以在这里关掉。
             """, """
-            This adds a hook to these config files (other hooks are left alone, and each file is backed up first as .agentdock-backup):
+            This adds a hook to these config files (other hooks are left alone, and each file is backed up before every change as .agentdock-backup-<time>):
             · Claude Code: ~/.claude/settings.json (plus the settings.json of any other Claude accounts in your local config)
             · Codex: ~/.codex/hooks.json (Codex will ask you to trust this hook the next time it runs)
 

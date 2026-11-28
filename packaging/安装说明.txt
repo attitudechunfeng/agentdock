@@ -30,8 +30,8 @@ Convoy 是一个 Mac 应用：在一个窗口里查看和回复 Claude 桌面版
 - 项目看板的汇总会调用你本机的 Claude Code 命令行、Codex 或 Antigravity，花的是你自己账号的额度。
   看板默认不自动汇总：打开看板后勾选“每轮回复结束后自动更新”才开始。
 - “会话自动读到看板”默认关闭。打开时会在 Claude Code（~/.claude/settings.json）和 Codex（~/.codex/hooks.json）
-  里加一个钩子，改之前各备份一份 .agentdock-backup；关掉时会摘掉。
-- Convoy 自己写的文件在：~/Library/Application Support/Convoy 和 ~/.agentdock
+  里加一个钩子，改之前各备份一份（.agentdock-backup-时间，第一次的那份叫 .agentdock-backup）；关掉时会摘掉。
+- Convoy 自己写的文件在：~/Library/Application Support/AgentDock 和 ~/.agentdock
 
 五、更新
 - 新版本直接拖进“应用程序”覆盖旧的即可，看板和设置都保留。
@@ -39,7 +39,7 @@ Convoy 是一个 Mac 应用：在一个窗口里查看和回复 Claude 桌面版
 六、卸载
 1. 如果打开过“会话自动读到看板”，先在看板底部把它关掉（会把钩子摘掉）。
 2. 退出 Convoy（⌘Q），把它从“应用程序”拖到废纸篓。
-3. 想连数据一起删：删除 ~/Library/Application Support/Convoy 和 ~/.agentdock 两个文件夹。
+3. 想连数据一起删：删除 ~/Library/Application Support/AgentDock 和 ~/.agentdock 两个文件夹。
 
 七、常见问题
 - 关掉窗口后它还在吗？在。点红点只是收起窗口，Convoy 在后台继续同步；点程序坞图标打开，⌘Q 真正退出。

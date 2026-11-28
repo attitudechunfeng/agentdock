@@ -1076,33 +1076,165 @@ func boardHook() {
     if let d = try? JSONSerialization.data(withJSONObject: out) { FileHandle.standardOutput.write(d) }
 }
 
+/// 一份配置文件装上 / 摘掉钩子之后的结果
+enum HookFileOutcome: Equatable {
+    case changed            // 改了，并且重新读出来核对过
+    case unchanged          // 本来就是想要的状态，没动文件
+    case skipped            // 文件读不懂（不是 JSON 对象），没动
+    case failed(String)     // 写不进去或核对不上，已经恢复成改之前的样子
+}
+
+private let backupStamp: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "yyyyMMdd-HHmmss"
+    return f
+}()
+
+/// 带时间的备份最多留这么多份，多了删最旧的
+private let backupKeep = 10
+
+/// 在解析好的配置里装上 / 摘掉看板钩子，返回有没有改动
+func applyBoardHooks(_ root: inout JSONValue, on: Bool, command: String) -> Bool {
+    var hooks = JSONValue.object(root["hooks"]?.objectPairs ?? [])   // hooks 不是对象（null 之类）就当没有
+    var dirty = false
+    for ev in ["UserPromptSubmit", "SessionStart"] {
+        let old = hooks[ev]?.items ?? []
+        var groups = old.filter { !isBoardHookGroup($0) }
+        if on { groups.append(boardHookGroup(command)) }
+        if groups != old { dirty = true }
+        hooks.set(ev, groups.isEmpty ? nil : .array(groups))
+    }
+    if dirty { root.set("hooks", (hooks.objectPairs ?? []).isEmpty ? nil : hooks) }
+    return dirty
+}
+
+/// 这一组钩子里有没有看板钩子：命令带 --board-hook 的，包括改名前指向旧应用路径的
+private func isBoardHookGroup(_ g: JSONValue) -> Bool {
+    g["hooks"]?.items.contains { ($0["command"]?.string ?? "").contains("--board-hook") } == true
+}
+
+private func boardHookGroup(_ command: String) -> JSONValue {
+    .object([("hooks", .array([.object([("type", .string("command")), ("command", .string(command)), ("timeout", .number("5"))])]))])
+}
+
+/// 在一份配置文件里装上 / 摘掉看板钩子：只动带 --board-hook 的条目，别的钩子和其余的键按原样写回。
+/// 改之前先备份，写完重新读一遍核对，不对就恢复。
+/// createIfMissing：文件不存在时要不要新建；now：备份文件名里的时间（测试时传固定的）
+func updateBoardHooks(file f: String, on: Bool, command: String, createIfMissing: Bool, now: Date = Date()) -> HookFileOutcome {
+    let fm = FileManager.default
+    // 配置文件可能是个链接（dotfiles 之类）：读写都对着链接指向的那个文件，权限也取它的
+    let url = URL(fileURLWithPath: f).resolvingSymlinksInPath()
+    let exists = fm.fileExists(atPath: f)
+    guard exists || createIfMissing else { return .unchanged }
+    let data: Data
+    if exists {
+        guard let d = try? Data(contentsOf: url) else { return .skipped }
+        data = d
+    } else {
+        data = Data()
+    }
+    // 解不成 UTF-8 的文件不动，不然写回去时坏字节会被换成乱码；空文件当成还没有任何设置
+    guard let original = String(data: data, encoding: .utf8) else { return .skipped }
+    guard let root = try? JSONValue.parse(original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "{}" : original),
+          root.objectPairs != nil else { return .skipped }
+    var newRoot = root
+    guard applyBoardHooks(&newRoot, on: on, command: command) else { return .unchanged }
+
+    // 改之前备份：第一次的那份 .agentdock-backup 一直留着，之后每次改动再留一份带时间的。
+    // 同一秒里改了好几次就在后面加两位序号，不覆盖上一次改动前的那份
+    let stamp = f + ".agentdock-backup-" + backupStamp.string(from: now)
+    var latest = stamp
+    var n = 2
+    while fm.fileExists(atPath: latest) {
+        latest = stamp + "-" + String(format: "%02d", n)
+        n += 1
+    }
+    let mode = exists ? (try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int : nil
+    if exists {
+        // 备份里写的是改动前读到的内容。不复制文件本身：配置是个链接时复制出来的是链接，会跟着变
+        let first = f + ".agentdock-backup"
+        // 备份写不进去就不改配置：改了却没有能恢复的那一份
+        if !fm.fileExists(atPath: first) && !writeBackup(data, to: first, mode: mode) {
+            return .failed(tr("备份写不进去，没有改动配置", "could not write the backup; the configuration was not changed"))
+        }
+        guard writeBackup(data, to: latest, mode: mode) else {
+            return .failed(tr("备份写不进去，没有改动配置", "could not write the backup; the configuration was not changed"))
+        }
+        pruneBackups(of: f)
+    }
+    func restore() {
+        if exists {
+            try? data.write(to: url, options: .atomic)
+            if let mode { try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: f) }
+        } else {
+            try? fm.removeItem(at: url)
+        }
+    }
+    do {
+        try Data((newRoot.text + (original.hasSuffix("\n") ? "\n" : "")).utf8).write(to: url, options: .atomic)
+        if let mode { try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: f) }
+    } catch {
+        restore()
+        return .failed(error.localizedDescription)
+    }
+    // 核对：重新读一遍，和要写的内容一致才算数
+    guard let back = try? Data(contentsOf: url), let text = String(data: back, encoding: .utf8),
+          (try? JSONValue.parse(text)) == newRoot else {
+        restore()
+        return .failed(tr("写进去的内容核对不上", "the file didn't read back as written"))
+    }
+    return .changed
+}
+
+/// 把改动前的内容写成一份备份，权限和原文件一样
+private func writeBackup(_ data: Data, to path: String, mode: Int?) -> Bool {
+    let fm = FileManager.default
+    guard fm.createFile(atPath: path, contents: data, attributes: [.posixPermissions: mode ?? 0o644]) else { return false }
+    if let mode { try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: path) }
+    return true
+}
+
+/// 带时间的备份只留最近 backupKeep 份，按创建时间的先后删最旧的。
+/// 只认这里自己生成的：普通文件，名字是“前缀 + 时间戳”，同一秒的再加两位序号。用户放在旁边的 settings.json.agentdock-backup-manual/ 这类目录不碰
+private func pruneBackups(of f: String) {
+    let fm = FileManager.default
+    let dir = URL(fileURLWithPath: (f as NSString).deletingLastPathComponent)
+    let prefix = (f as NSString).lastPathComponent + ".agentdock-backup-"
+    let entries = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey])) ?? []
+    var dated: [(url: URL, created: Date)] = []
+    for url in entries where isGeneratedBackup(url, prefix: prefix) {
+        let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+        dated.append((url, created))
+    }
+    dated.sort { $0.created == $1.created ? $0.url.path < $1.url.path : $0.created < $1.created }
+    for (url, _) in dated.dropLast(backupKeep) {
+        try? fm.removeItem(at: url)
+    }
+}
+
+/// 这里自己生成的备份：普通文件，名字是“前缀 + 时间戳”，同一秒的再加两位序号
+private func isGeneratedBackup(_ url: URL, prefix: String) -> Bool {
+    let name = url.lastPathComponent
+    guard name.hasPrefix(prefix),
+          String(name.dropFirst(prefix.count)).range(of: "^\\d{8}-\\d{6}(-\\d{2})?$", options: .regularExpression) != nil else { return false }
+    return (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+}
+
 /// 装上 / 摘掉钩子：Claude Code（~/.claude/settings.json，以及本机配置里额外 Claude 各账号的 settings.json）、Codex（~/.codex/hooks.json）。
-/// 改之前各备份一份 .agentdock-backup；只动带 --board-hook 的条目，别的钩子原样保留
+/// 每个文件怎么改见 updateBoardHooks；返回真的改了的文件
 @discardableResult
 func setBoardHooks(_ on: Bool) -> [String] {
     let home = NSHomeDirectory()
     let files = [home + "/.claude/settings.json", home + "/.codex/hooks.json"] + extraClaudeSettings
     var changed: [String] = []
     for f in files where FileManager.default.fileExists(atPath: f) || (on && f.hasSuffix(".claude/settings.json") && FileManager.default.fileExists(atPath: home + "/.claude")) {
-        let data = (try? Data(contentsOf: URL(fileURLWithPath: f))) ?? Data("{}".utf8)
-        guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
-        var hooks = root["hooks"] as? [String: Any] ?? [:]
-        var dirty = false
-        for ev in ["UserPromptSubmit", "SessionStart"] {
-            var groups = hooks[ev] as? [[String: Any]] ?? []
-            let before = groups.count
-            groups.removeAll { g in ((g["hooks"] as? [[String: Any]]) ?? []).contains { ($0["command"] as? String ?? "").contains("--board-hook") } }
-            if on { groups.append(["hooks": [["type": "command", "command": boardHookCommand, "timeout": 5]]]) }
-            if groups.count != before || on { dirty = true }
-            hooks[ev] = groups.isEmpty ? nil : groups
-        }
-        guard dirty else { continue }
-        root["hooks"] = hooks
-        let backup = f + ".agentdock-backup"
-        if !FileManager.default.fileExists(atPath: backup), FileManager.default.fileExists(atPath: f) { try? FileManager.default.copyItem(atPath: f, toPath: backup) }
-        if let d = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes, .sortedKeys]) {
-            try? d.write(to: URL(fileURLWithPath: f), options: .atomic)
-            changed.append(f)
+        let create = !FileManager.default.fileExists(atPath: f)
+        switch updateBoardHooks(file: f, on: on, command: boardHookCommand, createIfMissing: create) {
+        case .changed: changed.append(f)
+        case .unchanged: break
+        case .skipped: log("board hooks: \(f) 读不懂（不是 JSON 对象），没动")
+        case .failed(let why): log("board hooks: \(f) 没改成（\(why)），已恢复")
         }
     }
     log("board hooks \(on ? "on" : "off"): \(changed)")

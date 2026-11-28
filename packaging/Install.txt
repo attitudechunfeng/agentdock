@@ -28,7 +28,7 @@ Data and cost
 - Project board summaries call the Claude Code CLI, Codex, or Antigravity on your Mac and use your own quota.
   Auto-update is off by default; check "Auto-update after each reply" on the board to start.
 - "Share board with sessions" is off by default. Turning it on adds one hook to Claude Code (~/.claude/settings.json)
-  and Codex (~/.codex/hooks.json), backing each file up as .agentdock-backup first; turning it off removes the hook.
+  and Codex (~/.codex/hooks.json), backing each file up before every change (as .agentdock-backup-<time>; the first one is .agentdock-backup); turning it off removes the hook.
 - Convoy's own files: ~/Library/Application Support/AgentDock and ~/.agentdock
 
 Uninstall

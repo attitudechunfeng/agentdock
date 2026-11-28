@@ -1,6 +1,6 @@
 # Convoy 开发说明
 
-> 2026-11 由 AgentDock 改名为 Convoy（避开同名项目）。对外名字（应用、安装包、仓库、文案）都换了；内部标识保持不变，方便老用户升级：应用标识 `local.agentdock`、数据目录 `~/Library/Application Support/AgentDock` 和 `~/.agentdock`、签名证书「AgentDock Local Signing」、`.agentdock-backup` 备份名。旧版装的看板钩子指向 AgentDock.app，新版启动时会自动换成新路径（`migrateBoardHooks`）；`install.sh` 会顺手删掉旧的 /Applications/AgentDock.app。
+> 2026-11 由 AgentDock 改名为 Convoy（避开同名项目）。对外名字（应用、安装包、仓库、文案）都换了；内部标识保持不变，方便老用户升级：应用标识 `local.agentdock`、数据目录 `~/Library/Application Support/AgentDock` 和 `~/.agentdock`、签名证书「AgentDock Local Signing」、`.agentdock-backup` 备份名（第一次改动前留的那份；之后每次改动前再留一份 `.agentdock-backup-时间`）。旧版装的看板钩子指向 AgentDock.app，新版启动时会自动换成新路径（`migrateBoardHooks`）；`install.sh` 会顺手删掉旧的 /Applications/AgentDock.app。
 
 这份文档写给要改代码的人：实现原理、各项功能的细节、调试手段。使用介绍见 [README](../README.zh-CN.md)。
 
@@ -157,7 +157,7 @@ iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
   - Claude Code 命令行（Opus 5.5 默认 / Sonnet 5.5 / Haiku 5.5）、Codex 命令行（config.toml 的默认模型，可选强度）：无界面运行，不给工具、不跑你配的钩子、不留会话记录。
   - Gemini（4 Neon 高 / 中、3.8 Flash）：借开着的 Antigravity，用 agentapi 临时开一个标题为「Convoy 看板汇总」的对话，拿到回复就用 DeleteCascadeTrajectory 删掉；这种对话不进会话列表。它带工具、权限按 Antigravity 的全局预设，只能在提示里要求不用工具。
   - 被模型的安全过滤误拦（实测语音研究类内容 Opus、Sonnet 都会被拦）或 Antigravity 没开时，按 Opus → Sonnet → Gemini → Codex → Haiku 的顺序换下一个重试。每次调用约 10–100 秒，花的是对应账号的额度。
-- **会话读到看板**（默认关，底部“会话自动读到看板”开关，打开前弹窗说明）：在 Claude Code（`~/.claude/settings.json`，以及本机配置里其他 Claude 账号的 settings.json）和 Codex（`~/.codex/hooks.json`）里加一个钩子 `Convoy --board-hook`，挂在“发消息时”和“会话开始 / 压缩后”。钩子按会话 id 查 `~/.agentdock/boards/sessions.json` 找到所属项目，看板自上次注入后有变化、或会话刚开始 / 刚压缩时，把 `~/.agentdock/boards/.ctx/<项目 id>.txt`（总目标、现状、等你定、各大类进度、有效 / 无效做法）附进这一轮；没变化什么都不加。改配置前各备份一份 `.agentdock-backup`，只动带 `--board-hook` 的条目。Codex 第一次用到时会请你确认信任这个钩子。Antigravity 没有钩子，读不到。
+- **会话读到看板**（默认关，底部“会话自动读到看板”开关，打开前弹窗说明）：在 Claude Code（`~/.claude/settings.json`，以及本机配置里其他 Claude 账号的 settings.json）和 Codex（`~/.codex/hooks.json`）里加一个钩子 `Convoy --board-hook`，挂在“发消息时”和“会话开始 / 压缩后”。钩子按会话 id 查 `~/.agentdock/boards/sessions.json` 找到所属项目，看板自上次注入后有变化、或会话刚开始 / 刚压缩时，把 `~/.agentdock/boards/.ctx/<项目 id>.txt`（总目标、现状、等你定、各大类进度、有效 / 无效做法）附进这一轮；没变化什么都不加。改配置前各备份一份（第一次是 `.agentdock-backup`，之后每次是 `.agentdock-backup-时间`，最多留 10 份），只动带 `--board-hook` 的条目，其余的键按原来的顺序和写法保留（`OrderedJSON.swift`），写完重新读一遍核对，不对就恢复。Codex 第一次用到时会请你确认信任这个钩子。Antigravity 没有钩子，读不到。
 - **项目文件**：每个项目一份完整 Markdown `~/.agentdock/boards/<项目名>.md`，目录里还有 `README.md` 索引。不开钩子时，可以用 ⋯ →「复制给 agent 的提示」让会话先读这份文件。
 - **存储**：看板内容、归类、汇总进度在 `~/Library/Application Support/AgentDock/board.json`。
 
