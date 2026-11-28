@@ -23,7 +23,7 @@ private func demoFile(_ id: String) -> URL {
     return f
 }
 
-private let claudeApp = claudeAppPath, codexApp = codexAppPath, agyApp = "/Applications/Antigravity.app"
+private let claudeApp = claudeAppPath, codexApp = codexAppPath, agyApp = antigravityAppPath
 
 func demoSessions() -> [Session] {
     func s(_ id: String, _ kind: Kind, _ app: String, _ path: String, _ title: String, _ project: String, _ min: Double,

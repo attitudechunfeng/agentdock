@@ -391,7 +391,7 @@ func readUsage() async -> [UsageApp] {
                 items.append(UsageItem(label: "\(gname) \(w)", used: 1 - f, note: reset))
             }
         }
-        if !items.isEmpty { out.append(UsageApp(app: "Antigravity", appPath: "/Applications/Antigravity.app", items: items)) }
+        if !items.isEmpty { out.append(UsageApp(app: "Antigravity", appPath: antigravityAppPath, items: items)) }
     }
     // Codex：会话记录里每轮都写一份用量（rate_limits）。够新就直接用，不去点 Codex 的界面；
     // 旧了再点侧栏“用量”菜单读；Codex 没开窗口（菜单不存在）时退回用记录里最后一次的数字
@@ -569,7 +569,7 @@ struct AppCheck: Identifiable, Hashable {
 
 let checkApps: [(name: String, path: String, kind: Kind)] = claudeApps.map { ($0.label, $0.path, Kind.claude) } + [
     ("Codex", codexAppPath, .codex),
-    ("Antigravity", "/Applications/Antigravity.app", .antigravity),
+    ("Antigravity", antigravityAppPath, .antigravity),
 ]
 
 func appVersion(_ path: String) -> String {

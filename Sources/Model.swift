@@ -41,7 +41,7 @@ struct Draft: Equatable {
 /// 本机装了哪些 agent 应用（按安装位置找，没装的不列）
 let newSessionApps: [(kind: Kind, app: String, path: String)] = (claudeApps.map { (Kind.claude, $0.label, $0.path) } + [
     (.codex, "Codex", codexAppPath),
-    (.antigravity, "Antigravity", "/Applications/Antigravity.app"),
+    (.antigravity, "Antigravity", antigravityAppPath),
 ]).filter { FileManager.default.fileExists(atPath: $0.path) }
 
 /// 首页环境检查里的一行
@@ -251,7 +251,7 @@ final class Model: ObservableObject {
         refreshAgyPreset()
         for name in [NSWorkspace.didDeactivateApplicationNotification, NSWorkspace.didLaunchApplicationNotification] {
             NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] n in
-                guard (n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleURL?.path == "/Applications/Antigravity.app" else { return }
+                guard (n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleURL?.path == antigravityAppPath else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + (name == NSWorkspace.didLaunchApplicationNotification ? 5 : 0.5)) { self?.refreshAgyPreset() }
             }
         }
@@ -288,7 +288,7 @@ final class Model: ObservableObject {
                     self.searchQueue.async { warmSearch(s) }
                 }
                 let st = (claudeApps.map { ($0.label, $0.path) } +
-                          [("Codex", codexAppPath), ("Antigravity", "/Applications/Antigravity.app")]).compactMap { name, path -> AgentStatus? in
+                          [("Codex", codexAppPath), ("Antigravity", antigravityAppPath)]).compactMap { name, path -> AgentStatus? in
                     let installed = FileManager.default.fileExists(atPath: path)
                     // Claude 没装就不列
                     if !installed && name.hasPrefix("Claude") { return nil }

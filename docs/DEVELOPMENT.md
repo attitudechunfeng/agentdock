@@ -42,7 +42,7 @@ iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
 
 - 打包：`./package.sh`，生成 `dist/Convoy-<版本>.dmg`（Apple 芯片和 Intel 通用，约 3.6 MB），里面有 Convoy.app、“应用程序”快捷方式和 `安装说明.txt`（源文件在 `packaging/`）。版本号改 `Info.plist` 的 `CFBundleShortVersionString`。
 - 签名用本机钥匙串里的自签名证书“AgentDock Local Signing”，没有经过 Apple 公证：对方第一次打开要右键“打开”，或在“系统设置 → 隐私与安全性”里点“仍要打开”，安装说明里写了。每次都用同一张证书签，对方更新后辅助功能权限一般不用重开。
-- 对方机器上的应用按 bundle id 找：Codex（`com.openai.codex`，有的叫 ChatGPT.app、有的叫 Codex.app）、Claude（`com.anthropic.claudefordesktop`）。另外的 Claude 桌面应用（比如多账号启动器）写在本机的 `~/.agentdock/config.json` 里，格式见 `Sources/Sessions.swift` 开头，这个文件不随应用分发。看板汇总找 Claude Code 命令行时，除了常见位置，还会用 Claude 桌面版自带的那份。
+- 对方机器上的应用按 bundle id 找：Codex（`com.openai.codex`，有的叫 ChatGPT.app、有的叫 Codex.app）、Claude（`com.anthropic.claudefordesktop`）、Antigravity（`com.google.antigravity`，找不到再用 /Applications 或 ~/Applications 里的）。另外的 Claude 桌面应用（比如多账号启动器）写在本机的 `~/.agentdock/config.json` 里，格式见 `Sources/Sessions.swift` 开头，这个文件不随应用分发。看板汇总找 Claude Code 命令行时，除了常见位置，还会用 Claude 桌面版自带的那份。
 - 新装默认：看板不自动汇总、会话不自动读看板，都要对方自己打开，避免没打招呼就花额度或改配置。
 - 首次启动有 5 步引导（是什么、找到的应用、开辅助功能、怎么用、项目看板），看完记在 `onboarded.v1`；首页“使用引导”可以再看。
 

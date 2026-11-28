@@ -64,7 +64,7 @@ func runAgentapi(_ args: [String]) throws -> String {
     guard let hub = hubs.max(by: { mtimeOf($0) < mtimeOf($1) }) else { throw SendError(message: tr("Antigravity 没在运行", "Antigravity isn’t running")) }
     let o = try JSONSerialization.jsonObject(with: Data(contentsOf: hub)) as! [String: Any]
     let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/Applications/Antigravity.app/Contents/Resources/bin/language_server")
+    p.executableURL = URL(fileURLWithPath: agyServer)
     p.arguments = ["agentapi"] + args
     var env = ProcessInfo.processInfo.environment
     env["ANTIGRAVITY_LS_ADDRESS"] = "127.0.0.1:\(o["httpPort"]!)"

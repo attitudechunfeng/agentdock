@@ -12,6 +12,11 @@ private func appPath(_ bundle: String, _ fallback: String) -> String {
 }
 let codexAppPath = appPath("com.openai.codex", FileManager.default.fileExists(atPath: "/Applications/Codex.app") ? "/Applications/Codex.app" : "/Applications/ChatGPT.app")
 let claudeAppPath = appPath("com.anthropic.claudefordesktop", "/Applications/Claude.app")
+/// Antigravity 同样按 bundle id 找；找不到再用常见安装位置（/Applications，其次 ~/Applications）
+let antigravityAppPath = appPath("com.google.antigravity",
+    ["/Applications/Antigravity.app", NSHomeDirectory() + "/Applications/Antigravity.app"].first { FileManager.default.fileExists(atPath: $0) } ?? "/Applications/Antigravity.app")
+/// Antigravity 自带的命令行（agentapi 在这里）
+let agyServer = antigravityAppPath + "/Contents/Resources/bin/language_server"
 
 // MARK: 本机配置：额外的 Claude 桌面应用（多账号启动器之类）
 // ~/.agentdock/config.json，只在本机、不随应用分发。例：
@@ -490,7 +495,7 @@ func scanAntigravity() -> [Session] {
                            project: ws.flatMap { URL(string: $0)?.lastPathComponent } ?? "",
                            running: text(2) != "CASCADE_RUN_STATUS_IDLE" || sqlite3_column_int(st, 3) != 0,
                            updated: Date(timeIntervalSince1970: Double(sqlite3_column_int64(st, 4))),
-                           link: nil, appPath: "/Applications/Antigravity.app",
+                           link: nil, appPath: antigravityAppPath,
                            cwd: ws.flatMap { URL(string: $0)?.path } ?? "", perm: agyPreset(cid),
                            outputAt: Date(timeIntervalSince1970: Double(sqlite3_column_int64(st, 6))),
                            nativeUnread: agyUnread(cid, modified: Double(sqlite3_column_int64(st, 6)))))

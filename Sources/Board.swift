@@ -653,7 +653,7 @@ final class BoardStore: ObservableObject {
         var tries = [settings]
         func add(_ t: BoardSettings) { if !tries.contains(where: { $0.agent == t.agent && $0.model == t.model }) { tries.append(t) } }
         if claudeCLI() != nil { for m in ["opus", "sonnet"] { var t = settings; t.agent = "claude"; t.claudeModel = m; add(t) } }
-        if runningApp("/Applications/Antigravity.app") != nil { var t = settings; t.agent = "gemini"; add(t) }
+        if runningApp(antigravityAppPath) != nil { var t = settings; t.agent = "gemini"; add(t) }
         if codexCLI() != nil { var t = settings; t.agent = "codex"; add(t) }
         if claudeCLI() != nil { var t = settings; t.agent = "claude"; t.claudeModel = "haiku"; add(t) }
         var last: Error = BoardError(tr("没有可用的汇总 agent", "No summarizer agent available"))
@@ -944,13 +944,12 @@ func runBoardAgent(system: String, prompt: String, settings: BoardSettings) asyn
 let boardScratchTitle = "Convoy 看板汇总"
 /// 改名前（AgentDock）留下的临时对话标题，列表里同样不显示
 let boardScratchTitles: Set<String> = [boardScratchTitle, "AgentDock 看板汇总"]
-private let agyServer = "/Applications/Antigravity.app/Contents/Resources/bin/language_server"
 
 /// Antigravity 的对话带工具、权限按你的全局预设，没法关掉，只能在提示里要求它不用工具。
 /// 回复看对话记录：最后一步是模型的回复、已完成，且 2 秒内没有新步骤，就算答完。5 分钟超时。
 /// 不论成败都删掉这个对话（官方接口 DeleteCascadeTrajectory，对话记录和会话库里的条目一起删）
 func runGemini(_ prompt: String, model: String) async throws -> String {
-    guard runningApp("/Applications/Antigravity.app") != nil else { throw BoardError(tr("Antigravity 没开，Gemini 用不了", "Antigravity isn't running, so Gemini is unavailable")) }
+    guard runningApp(antigravityAppPath) != nil else { throw BoardError(tr("Antigravity 没开，Gemini 用不了", "Antigravity isn't running, so Gemini is unavailable")) }
     let full = prompt + "\n\n（不要调用任何工具，不要读写文件、不要运行命令，直接按要求输出。）"
     let out: String
     do {
@@ -1003,7 +1002,8 @@ private func waitGemini(_ cid: String) async throws -> String {
 let boardCtxDir = boardDir.appendingPathComponent(".ctx")
 private let boardSessionsURL = boardDir.appendingPathComponent("sessions.json")
 private let boardSeenURL = boardDir.appendingPathComponent(".ctx/seen.json")
-let boardHookCommand = "'/Applications/Convoy.app/Contents/MacOS/Convoy' --board-hook"
+/// 钩子里写的命令：现在运行着的这个 Convoy（装在 /Applications 以外的地方时也指得对）
+let boardHookCommand = "'" + (Bundle.main.executablePath ?? "/Applications/Convoy.app/Contents/MacOS/Convoy").replacingOccurrences(of: "'", with: "'\\''") + "' --board-hook"
 
 extension Project {
     /// 注入到会话里的精简版
@@ -1109,14 +1109,27 @@ func setBoardHooks(_ on: Bool) -> [String] {
     return changed
 }
 
-/// 改名后（AgentDock → Convoy）已装的钩子还指着旧应用的路径：发现带 --board-hook 却不是现在这条命令，就换成新的
+/// 一份配置里所有看板钩子的命令，是解析 JSON 之后的原文。文件读不懂返回 nil
+func boardHookCommands(inFile f: String) -> [String]? {
+    guard let d = try? Data(contentsOf: URL(fileURLWithPath: f)),
+          let root = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return nil }
+    var out: [String] = []
+    for ev in (root["hooks"] as? [String: Any] ?? [:]).values {
+        for g in ev as? [[String: Any]] ?? [] {
+            for h in g["hooks"] as? [[String: Any]] ?? [] {
+                if let c = h["command"] as? String, c.contains("--board-hook") { out.append(c) }
+            }
+        }
+    }
+    return out
+}
+
+/// 改名后（AgentDock → Convoy）已装的钩子还指着旧应用的路径：发现带 --board-hook 却不是现在这条命令，就换成新的。
+/// 比的是解析出来的命令：路径里有单引号时，命令带着 shell 转义的反斜杠，写进 JSON 又会被再转义一次，直接比文件原文对不上
 func migrateBoardHooks() {
     let home = NSHomeDirectory()
     let files = [home + "/.claude/settings.json", home + "/.codex/hooks.json"] + extraClaudeSettings
-    let stale = files.contains {
-        let t = (try? String(contentsOfFile: $0, encoding: .utf8)) ?? ""
-        return t.contains("--board-hook") && !t.contains(boardHookCommand)
-    }
+    let stale = files.contains { (boardHookCommands(inFile: $0) ?? []).contains { $0 != boardHookCommand } }
     if stale { setBoardHooks(true) }
 }
 
