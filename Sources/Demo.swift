@@ -327,7 +327,7 @@ private func writeGif(_ frames: [GifFrame], scale: Double, to path: String) {
         let str = NSAttributedString(string: f.caption, attributes: [.font: NSFont.systemFont(ofSize: 21, weight: .semibold),
                                                                      .foregroundColor: NSColor.white, .paragraphStyle: para])
         let h = str.size().height
-        str.draw(in: CGRect(x: 0, y: (Double(bar) - h) / 2, width: Double(W), height: h))
+        str.draw(in: CGRect(x: 0, y: (Double(bar) - Double(h)) / 2, width: Double(W), height: h))
         NSGraphicsContext.restoreGraphicsState()
         guard let out = ctx.makeImage() else { continue }
         CGImageDestinationAddImage(dest, out, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: f.delay,

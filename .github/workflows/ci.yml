@@ -1,0 +1,20 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # CI 上没有“AgentDock Local Signing”证书，只编译不签名
+      - name: 编译
+        run: CONVOY_SKIP_SIGN=1 ./build.sh
+      - name: 单元测试
+        run: tools/test.sh
+      # 聊天页用到的脚本用 Node 测，tools/test-*.mjs 有几个就跑几个，哪个失败这一步就失败
+      - name: 网页脚本测试
+        run: |
+          for t in tools/test-*.mjs; do
+            if [ -f "$t" ]; then node "$t"; fi
+          done

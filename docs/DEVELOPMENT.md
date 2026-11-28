@@ -31,6 +31,20 @@ iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
 
 签名用的是钥匙串里的本地自签名证书「AgentDock Local Signing」，签名要求固定。所以在「系统设置 → 隐私与安全性 → 辅助功能」里授权一次后，重新编译也不用再授权。
 
+## 测试
+
+单元测试在 `Tests/`：每个测试是一个不带参数的函数，名字以 `test` 开头，断言用 `expect(_:_:)` / `expectEq(_:_:_:)`。运行：
+
+```bash
+tools/test.sh
+```
+
+它把 `Sources/`（除 `main.swift`）和 `Tests/` 一起编成一个命令行程序再运行，不用装到“应用程序”里。测的是不依赖界面和原应用的逻辑：解析记录、拼看板、改配置文件这些。
+
+聊天页用到的脚本用 Node 测，放在 `tools/test-*.mjs`，直接 `node tools/test-xxx.mjs`。
+
+GitHub Actions（`.github/workflows/ci.yml`）在每次推送和 PR 上编译一遍并跑上面的测试。CI 上没有签名证书，用的是 `CONVOY_SKIP_SIGN=1 ./build.sh`。
+
 ## 界面语言
 
 - 中文（默认）和英文两套。界面文案统一写成 `tr("中文", "English")`（`Sources/Lang.swift`），聊天页里同样用 `tr('中文','English')`，语言由 Swift 在页面加载前注入 `window.AD_LANG`。
